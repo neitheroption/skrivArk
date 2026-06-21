@@ -351,13 +351,55 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
     .ctx-menu button.danger:hover { background: #fff0f0; }
     .ctx-menu-sep { height: 1px; background: #eee; margin: 3px 0; }
 
+    /* ── Panel drag handle (mobile only) ── */
+    .panel-handle { display: none; }
+    .panel-handle-label { font-size: .72rem; color: #999; font-weight: 500; letter-spacing: .02em; }
+
+    /* ── Mobile: bottom-sheet panel + full-screen sheet ── */
+    @media (max-width: 767px) {
+      #sheet-bg {
+        position: fixed; inset: 0;
+        padding: 0; min-height: 0;
+        display: block; overflow: hidden;
+      }
+      .sheet {
+        transform-origin: top left;
+        box-shadow: none; min-height: 0;
+      }
+      #input-panel {
+        top: auto; bottom: 0; left: 0; right: 0;
+        width: 100%; height: 85vh;
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 24px rgba(0,0,0,.22);
+        transform: translateY(calc(100% - 60px));
+        transition: transform .3s cubic-bezier(.32,0,.67,0);
+        padding: 0 20px 40px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .panel-handle {
+        display: flex; flex-direction: column;
+        align-items: center; gap: 5px;
+        padding: 10px 0 8px;
+        cursor: pointer; user-select: none; -webkit-user-select: none;
+        position: sticky; top: 0;
+        background: white; border-radius: 16px 16px 0 0; z-index: 1;
+      }
+      .panel-handle::before {
+        content: ''; display: block;
+        width: 36px; height: 4px;
+        background: #d0d0d0; border-radius: 2px;
+      }
+      #toolbar { z-index: 30; }
+    }
+
     /* ── Print ── */
     @page { size: A4 portrait; margin: 10mm; }
 
     @media print {
       body { background: white; }
       #input-panel, #toolbar { display: none !important; }
-      #sheet-bg { padding: 0; min-height: unset; display: block; }
+      #sheet-bg { position: static; padding: 0; min-height: unset; display: block; }
       /* Rotate landscape sheet (-90°) to fill portrait A4 (190×277 mm printable) */
       .sheet {
         box-shadow: none; padding: 0; margin: 0;
@@ -380,6 +422,9 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
 
 <!-- Input panel overlay -->
 <div id="input-panel">
+  <div class="panel-handle" onclick="togglePanel()">
+    <span class="panel-handle-label">Redigera</span>
+  </div>
   <h1>Skrivövning</h1>
   <p class="subtitle">Skriv in upp till sex ord. Arket uppdateras direkt bakom panelen.</p>
 
@@ -874,6 +919,72 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
     sheet.innerHTML = html;
   }
 
+  // ── Mobile bottom-sheet ───────────────────────────────────────────
+  const PANEL_PEEK  = 60;
+  let   panelExpanded = false;
+
+  function isMobile() { return window.innerWidth < 768; }
+
+  function scaleSheet() {
+    const sheet = document.getElementById('sheet');
+    if (!isMobile()) { sheet.style.transform = ''; return; }
+    const scale = window.innerWidth / (277 * MM2PX);
+    sheet.style.transform      = `scale(${scale})`;
+    sheet.style.transformOrigin = 'top left';
+  }
+
+  function peekOffset() {
+    return document.getElementById('input-panel').getBoundingClientRect().height - PANEL_PEEK;
+  }
+
+  function setPanel(expanded, animate) {
+    panelExpanded = expanded;
+    const panel = document.getElementById('input-panel');
+    panel.style.transition = (animate !== false)
+      ? 'transform .3s cubic-bezier(.32,0,.67,0)' : 'none';
+    panel.style.transform = expanded ? 'translateY(0)' : `translateY(${peekOffset()}px)`;
+    document.querySelector('.panel-handle-label').textContent = expanded ? 'Dölj' : 'Redigera';
+  }
+
+  function togglePanel() { if (isMobile()) setPanel(!panelExpanded); }
+
+  // Touch drag on handle bar
+  (function () {
+    let startY = 0, startPanelY = 0, dragging = false;
+
+    document.addEventListener('touchstart', e => {
+      if (!isMobile() || !e.target.closest('.panel-handle')) return;
+      startY     = e.touches[0].clientY;
+      startPanelY = new DOMMatrix(
+        getComputedStyle(document.getElementById('input-panel')).transform
+      ).m42;
+      dragging = true;
+      document.getElementById('input-panel').style.transition = 'none';
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+      if (!dragging) return;
+      const dy   = e.touches[0].clientY - startY;
+      const maxY = peekOffset();
+      document.getElementById('input-panel').style.transform =
+        `translateY(${Math.max(0, Math.min(maxY, startPanelY + dy))}px)`;
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+      if (!dragging) return;
+      dragging = false;
+      const currentY = new DOMMatrix(
+        getComputedStyle(document.getElementById('input-panel')).transform
+      ).m42;
+      setPanel(currentY < peekOffset() / 2);
+    });
+  })();
+
+  window.addEventListener('resize', () => {
+    scaleSheet();
+    if (isMobile()) setPanel(panelExpanded, false);
+  });
+
   // ── Print mode ────────────────────────────────────────────────────
   async function printMode() {
     if (!getActiveSlots().length) { alert('Ange minst ett ord.'); return; }
@@ -884,11 +995,14 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
   }
 
   function editMode() {
-    document.getElementById('input-panel').style.display = 'block';
-    document.getElementById('toolbar').style.display     = 'none';
+    const panel = document.getElementById('input-panel');
+    panel.style.display = 'block';
+    document.getElementById('toolbar').style.display = 'none';
+    if (isMobile()) requestAnimationFrame(() => setPanel(false, false));
   }
 
   // Initialize
+  scaleSheet();
   updateSheet();
   document.fonts.ready.then(updateSheet);
 </script>
