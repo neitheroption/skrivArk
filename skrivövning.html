@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skriv</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Always-visible sheet in background ── */
+    body { background: #6b6b6b; font-family: system-ui, -apple-system, sans-serif; }
+
+    #sheet-bg {
+      min-height: 100vh;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .sheet {
+      width: 277mm;
+      min-height: 190mm;
+      background: white;
+      padding: 10mm 12mm;
+      box-shadow: 0 4px 24px rgba(0,0,0,.55);
+      flex-shrink: 0;
+    }
+
+    .sheet-placeholder {
+      color: #bbb;
+      text-align: center;
+      padding: 30mm 0;
+      font-size: 14px;
+    }
+
+    /* ── Input panel — fixed overlay on the left ── */
+    #input-panel {
+      position: fixed;
+      top: 0; left: 0;
+      width: 460px;
+      height: 100vh;
+      overflow-y: auto;
+      background: white;
+      box-shadow: 4px 0 24px rgba(0,0,0,.35);
+      z-index: 10;
+      padding: 22px 24px 32px;
+    }
+
+    h1 { font-size: 1.3rem; color: #1a1a1a; margin-bottom: 4px; }
+    .subtitle { font-size: .8rem; color: #666; margin-bottom: 18px; line-height: 1.45; }
+
+    .word-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 7px;
+      margin-bottom: 16px;
+    }
+    .word-grid input {
+      padding: 8px 11px;
+      border: 2px solid #ddd; border-radius: 7px;
+      font-size: .95rem; transition: border-color .15s;
+    }
+    .word-grid input:focus { outline: none; border-color: #4f8ef7; }
+
+    details {
+      border: 1px solid #e5e5e5; border-radius: 8px;
+      margin-bottom: 16px; overflow: hidden;
+    }
+    summary {
+      padding: 9px 12px; cursor: pointer; list-style: none;
+      font-size: .82rem; font-weight: 600; color: #444;
+      background: #fafafa; user-select: none;
+    }
+    summary::before { content: '▸ '; }
+    details[open] summary::before { content: '▾ '; }
+    summary::-webkit-details-marker { display: none; }
+
+    .cfg-body { padding: 10px 12px; display: grid; gap: 9px; }
+    .cfg-sep { border: none; border-top: 1px solid #eee; margin: 1px 0; }
+
+    .cfg-row {
+      display: grid;
+      grid-template-columns: 1fr 120px 42px;
+      align-items: center; gap: 6px;
+    }
+    .cfg-row label { font-size: .77rem; color: #555; line-height: 1.35; }
+    .cfg-row input[type=range] { accent-color: #4f8ef7; width: 100%; }
+    .cfg-row .vl {
+      font-size: .75rem; color: #888;
+      text-align: right; font-variant-numeric: tabular-nums;
+    }
+
+    .btn-go {
+      width: 100%; padding: 11px;
+      background: #4f8ef7; color: #fff;
+      border: none; border-radius: 8px;
+      font-size: .95rem; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-go:hover { background: #3a76e0; }
+
+    /* ── Print toolbar — hidden until print mode ── */
+    #toolbar {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; z-index: 10;
+      padding: 8px 14px; background: #e8eaed;
+      border-bottom: 1px solid #ccc;
+      align-items: center; gap: 8px;
+    }
+    #toolbar button {
+      padding: 6px 14px; border: none; border-radius: 6px;
+      font-size: .875rem; font-weight: 500; cursor: pointer;
+    }
+    .btn-back  { background: #d5d5d5; color: #333; }
+    .btn-back:hover  { background: #c0c0c0; }
+    .btn-print { background: #4f8ef7; color: #fff; }
+    .btn-print:hover { background: #3a76e0; }
+    .toolbar-hint { font-size: .78rem; color: #777; margin-left: 4px; }
+
+    /* ── Word rows ── */
+    .wr { display: flex; width: 100%; position: relative; }
+    .wr + .wr { margin-top: 2.5mm; }
+
+    .ex-cell { position: relative; flex-shrink: 0; border-right: .4mm solid #bbb; }
+    .ex-word {
+      font-family: 'Patrick Hand', cursive;
+      position: absolute; left: 2mm;
+      white-space: nowrap; line-height: 1;
+    }
+
+    .prac-area { flex: 1; display: flex; }
+    .prac-cell { flex: 1; position: relative; overflow: hidden; }
+    .prac-cell + .prac-cell { border-left: .25mm solid #ddd; }
+
+    .gl { position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
+    .gl-a { border-top: .3mm dotted #b0b0b0; }
+    .gl-x { border-top: .3mm dotted #b0b0b0; }
+    .gl-b { border-top: .45mm solid  #999;   }
+    .gl-d { border-top: .3mm dotted #b0b0b0; }
+
+    /* ── Print media ── */
+    @page { size: A4 portrait; margin: 10mm; }
+
+    @media print {
+      body { background: white; }
+      #input-panel, #toolbar { display: none !important; }
+      #sheet-bg { padding: 0; min-height: unset; display: block; }
+      /* Rotate landscape sheet to fill portrait A4 (190×277mm printable area) */
+      .sheet {
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        position: fixed;
+        top: 0; left: 0;
+        width: 277mm;
+        height: 190mm;
+        transform: translateY(277mm) rotate(-90deg);
+        transform-origin: 0 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Always-visible sheet -->
+<div id="sheet-bg">
+  <div class="sheet" id="sheet">
+    <p class="sheet-placeholder">Skriv in ord i panelen till vänster för att se förhandsgranskning</p>
+  </div>
+</div>
+
+<!-- Input panel overlay -->
+<div id="input-panel">
+  <h1>Skrivövning</h1>
+  <p class="subtitle">Skriv in upp till sex ord. Arket uppdateras direkt bakom panelen.</p>
+
+  <div class="word-grid">
+    <input type="text" id="w1" placeholder="Ord 1" autocomplete="off" spellcheck="false">
+    <input type="text" id="w2" placeholder="Ord 2" autocomplete="off" spellcheck="false">
+    <input type="text" id="w3" placeholder="Ord 3" autocomplete="off" spellcheck="false">
+    <input type="text" id="w4" placeholder="Ord 4" autocomplete="off" spellcheck="false">
+    <input type="text" id="w5" placeholder="Ord 5" autocomplete="off" spellcheck="false">
+    <input type="text" id="w6" placeholder="Ord 6" autocomplete="off" spellcheck="false">
+  </div>
+
+  <details open>
+    <summary>Inställningar</summary>
+    <div class="cfg-body">
+
+      <div class="cfg-row">
+        <label>Överkantslinje (versaler, långa)</label>
+        <input type="range" id="c-as" min="5" max="45" value="12" step="1">
+        <span class="vl" id="v-as">12 %</span>
+      </div>
+      <div class="cfg-row">
+        <label>X-höjdslinje (a, o, u, e …)</label>
+        <input type="range" id="c-xh" min="20" max="65" value="46" step="1">
+        <span class="vl" id="v-xh">46 %</span>
+      </div>
+      <div class="cfg-row">
+        <label>Baslinje — solid</label>
+        <input type="range" id="c-bl" min="45" max="88" value="71" step="1">
+        <span class="vl" id="v-bl">71 %</span>
+      </div>
+      <div class="cfg-row">
+        <label>Underkantslinje (j, g, q, y …)</label>
+        <input type="range" id="c-ds" min="65" max="99" value="88" step="1">
+        <span class="vl" id="v-ds">88 %</span>
+      </div>
+
+    </div>
+  </details>
+
+  <button class="btn-go" onclick="printMode()">Skriv ut / Spara PDF →</button>
+</div>
+
+<!-- Print-mode toolbar -->
+<div id="toolbar">
+  <button class="btn-back"  onclick="editMode()">← Tillbaka</button>
+  <button class="btn-print" onclick="window.print()">Skriv ut / Spara PDF</button>
+  <span class="toolbar-hint">Välj A4 stående · stäng av sidhuvuden i webbläsaren</span>
+</div>
+
+<script>
+  const MM2PX = 96 / 25.4;
+
+  // Fixed layout constants (not exposed as settings)
+  const RH = 30; // row height, mm
+  const EW = 52; // example cell width, mm
+  const NC = 5;  // max practice cells
+  const FS = 50; // font size, % of row height
+
+  // ── Slider live-update ──────────────────────────────────────────
+  const SLIDERS = [
+    ['c-as', 'v-as', v => v + ' %'],
+    ['c-xh', 'v-xh', v => v + ' %'],
+    ['c-bl', 'v-bl', v => v + ' %'],
+    ['c-ds', 'v-ds', v => v + ' %'],
+  ];
+  SLIDERS.forEach(([sid, vid, fmt]) => {
+    const s = document.getElementById(sid);
+    const v = document.getElementById(vid);
+    s.addEventListener('input', () => { v.textContent = fmt(s.value); updateSheet(); });
+  });
+  for (let i = 1; i <= 6; i++) {
+    document.getElementById('w' + i).addEventListener('input', updateSheet);
+  }
+
+  const gv = id => parseInt(document.getElementById(id).value, 10);
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function guideLines(as, xh, bl, ds) {
+    return `<div class="gl gl-a" style="top:${as}%"></div>
+            <div class="gl gl-x" style="top:${xh}%"></div>
+            <div class="gl gl-b" style="top:${bl}%"></div>
+            <div class="gl gl-d" style="top:${ds}%"></div>`;
+  }
+
+  function ghostSVG(word, bl, fsMM) {
+    return `<svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible"
+               xmlns="http://www.w3.org/2000/svg">
+      <text x="2mm" y="${bl}%"
+        font-family="'Patrick Hand', cursive"
+        font-size="${fsMM.toFixed(2)}mm"
+        fill="#c8c8c8">${word}</text>
+    </svg>`;
+  }
+
+  // Canvas text measurement
+  const _cvs = document.createElement('canvas');
+  const _ctx = _cvs.getContext('2d');
+  function measureMM(text, fsMM) {
+    _ctx.font = `${(fsMM * MM2PX).toFixed(1)}px "Patrick Hand", cursive`;
+    return _ctx.measureText(text).width / MM2PX;
+  }
+
+  // Single font size for all words: start at fs% of row height,
+  // shrink if any word is wider than the example cell.
+  function calcFsMM(words, rh, ew, fs) {
+    const exMaxMM = ew - 4;
+    let fsMM = rh * fs / 100;
+    words.forEach(word => {
+      const wMM = measureMM(word, fsMM);
+      if (wMM > exMaxMM) fsMM = Math.min(fsMM, fsMM * (exMaxMM / wMM));
+    });
+    return fsMM;
+  }
+
+  // ── Render the sheet ────────────────────────────────────────────
+  function updateSheet() {
+    const rh = RH, ew = EW, nc = NC, fs = FS;
+    const as = gv('c-as'), xh = gv('c-xh'), bl = gv('c-bl'), ds = gv('c-ds');
+
+    const words = [1,2,3,4,5,6]
+      .map(i => document.getElementById('w'+i).value.trim())
+      .filter(w => w);
+
+    const sheet = document.getElementById('sheet');
+
+    if (!words.length) {
+      sheet.innerHTML = '<p class="sheet-placeholder">Skriv in ord i panelen till vänster för att se förhandsgranskning</p>';
+      return;
+    }
+
+    const fsMM       = calcFsMM(words, rh, ew, fs);
+    const baselineMM = rh * bl / 100;
+    const topMM      = Math.max(0, baselineMM - 0.85 * fsMM);
+    const style      = `font-size:${fsMM.toFixed(2)}mm; top:${topMM.toFixed(2)}mm`;
+    const PRINT_W_MM = 253; // landscape sheet 277mm - 2×12mm padding
+    const pracAvailMM = PRINT_W_MM - ew;
+    const L          = guideLines(as, xh, bl, ds);
+
+    let html = '';
+    words.forEach(word => {
+      const escaped      = esc(word);
+      const wMM          = measureMM(word, fsMM);
+      const cellsForWord = Math.max(1, Math.min(nc, Math.floor(pracAvailMM / (wMM + 2))));
+      const ghost        = ghostSVG(escaped, bl, fsMM);
+
+      let cells = '';
+      for (let i = 0; i < cellsForWord; i++) {
+        cells += `<div class="prac-cell">${L}${ghost}</div>`;
+      }
+
+      html += `
+<div class="wr" style="height:${rh}mm">
+  <div class="ex-cell" style="width:${ew}mm">
+    ${L}
+    <div class="ex-word" style="${style}">${escaped}</div>
+  </div>
+  <div class="prac-area">${cells}</div>
+</div>`;
+    });
+
+    sheet.innerHTML = html;
+  }
+
+  // ── Mode switching ──────────────────────────────────────────────
+  async function printMode() {
+    const words = [1,2,3,4,5,6]
+      .map(i => document.getElementById('w'+i).value.trim())
+      .filter(Boolean);
+    if (!words.length) { alert('Ange minst ett ord.'); return; }
+
+    // Re-render with font accurately loaded
+    await document.fonts.load('16px "Patrick Hand"');
+    updateSheet();
+
+    document.getElementById('input-panel').style.display = 'none';
+    document.getElementById('toolbar').style.display     = 'flex';
+  }
+
+  function editMode() {
+    document.getElementById('input-panel').style.display = 'block';
+    document.getElementById('toolbar').style.display     = 'none';
+  }
+
+  // Initialize
+  updateSheet();
+  document.fonts.ready.then(updateSheet);
+</script>
+</body>
+</html>
