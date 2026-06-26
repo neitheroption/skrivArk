@@ -897,8 +897,9 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
     const L           = guideLines(as, xh, bl, ds);
     const ghostColor  = hex3(gv('c-gray'));
 
+    const isSingleWordRepeat = active.length === 1;
     let html = '';
-    displaySlots.forEach(({ slot, word }) => {
+    displaySlots.forEach(({ slot, word }, rowIdx) => {
       const escaped      = esc(word);
       const wMM          = measureMM(word, fsMM);
       const cellsForWord = Math.max(1, Math.min(NC, Math.floor(pracAvailMM / (wMM + 2))));
@@ -910,6 +911,8 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
         exContent = imgFile
           ? `<img src="images/${esc(imgFile)}" class="ex-img" alt="${escaped}">`
           : `<div class="ex-placeholder">Välj bild</div>`;
+      } else if (isSingleWordRepeat && rowIdx > 0) {
+        exContent = ghostSVG(escaped, bl, fsMM, ghostColor);
       } else {
         exContent = `<div class="ex-word" style="${wordStyle}">${escaped}</div>`;
       }
