@@ -490,6 +490,11 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
         <input type="range" id="c-ds" min="65" max="99" value="88" step="1">
         <span class="vl" id="v-ds">88 %</span>
       </div>
+      <div class="cfg-row">
+        <label>Gråton (övningsbokstäver)</label>
+        <input type="range" id="c-gray" min="130" max="240" value="200" step="5">
+        <span class="vl" id="v-gray">#c8c8c8</span>
+      </div>
       <label class="cfg-check">
         <input type="checkbox" id="c-leave-empty">
         Lämna en tom ruta till höger
@@ -571,13 +576,16 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
   }
 
   // ── Sliders ───────────────────────────────────────────────────────
+  const pct = v => v + ' %';
+  const hex3 = v => { const h = (+v).toString(16).padStart(2,'0'); return '#' + h + h + h; };
   const SLIDERS = [
-    ['c-as','v-as'], ['c-xh','v-xh'], ['c-bl','v-bl'], ['c-ds','v-ds'],
+    ['c-as', 'v-as', pct], ['c-xh', 'v-xh', pct], ['c-bl', 'v-bl', pct], ['c-ds', 'v-ds', pct],
+    ['c-gray', 'v-gray', hex3],
   ];
-  SLIDERS.forEach(([sid, vid]) => {
+  SLIDERS.forEach(([sid, vid, fmt]) => {
     const s = document.getElementById(sid);
     s.addEventListener('input', () => {
-      document.getElementById(vid).textContent = s.value + ' %';
+      document.getElementById(vid).textContent = fmt(s.value);
       updateSheet();
     });
   });
@@ -839,13 +847,13 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
             <div class="gl gl-d" style="top:${ds}%"></div>`;
   }
 
-  function ghostSVG(word, bl, fsMM) {
+  function ghostSVG(word, bl, fsMM, color) {
     return `<svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible"
                xmlns="http://www.w3.org/2000/svg">
       <text x="2mm" y="${bl}%"
         font-family="'Patrick Hand', cursive"
         font-size="${fsMM.toFixed(2)}mm"
-        fill="#c8c8c8">${word}</text>
+        fill="${color}">${word}</text>
     </svg>`;
   }
 
@@ -877,6 +885,9 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
       return;
     }
 
+    const displaySlots = active.length === 1
+      ? Array.from({length: 6}, () => ({ ...active[0] }))
+      : active;
     const words       = active.map(w => w.word);
     const fsMM        = calcFsMM(words, RH, EW, FS);
     const baselineMM  = RH * bl / 100;
@@ -884,13 +895,14 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
     const wordStyle   = `font-size:${fsMM.toFixed(2)}mm; top:${topMM.toFixed(2)}mm`;
     const pracAvailMM = PRINT_W_MM - EW;
     const L           = guideLines(as, xh, bl, ds);
+    const ghostColor  = hex3(gv('c-gray'));
 
     let html = '';
-    active.forEach(({ slot, word }) => {
+    displaySlots.forEach(({ slot, word }) => {
       const escaped      = esc(word);
       const wMM          = measureMM(word, fsMM);
       const cellsForWord = Math.max(1, Math.min(NC, Math.floor(pracAvailMM / (wMM + 2))));
-      const ghost        = ghostSVG(escaped, bl, fsMM);
+      const ghost        = ghostSVG(escaped, bl, fsMM, ghostColor);
 
       let exContent;
       if (appMode === 'image') {
