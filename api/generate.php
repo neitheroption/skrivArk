@@ -20,10 +20,11 @@ if ($word === '') {
 $prompt = "Skapa en teckning av en {$word} för användning i ett skrivhäfte för ett barn - gör den tydlig, gärna med klara färger och väldefinerade konturer. Låt bakgrunden vara genomskinlig.";
 
 $payload = json_encode([
-    'model'  => 'gpt-image-1',
-    'prompt' => $prompt,
-    'n'      => 1,
-    'size'   => '1024x1024',
+    'model'   => 'gpt-image-1',
+    'prompt'  => $prompt,
+    'n'       => 1,
+    'size'    => '1024x1024',
+    'quality' => 'low',
 ]);
 
 $ch = curl_init('https://api.openai.com/v1/images/generations');
