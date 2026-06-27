@@ -885,9 +885,8 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
       return;
     }
 
-    const displaySlots = active.length === 1
-      ? Array.from({length: 6}, () => ({ ...active[0] }))
-      : active;
+    const reps = active.length <= 3 ? [6, 3, 2][active.length - 1] : 1;
+    const displaySlots = active.flatMap(s => Array.from({length: reps}, (_, i) => ({ ...s, blockRow: i })));
     const words       = active.map(w => w.word);
     const fsMM        = calcFsMM(words, RH, EW, FS);
     const baselineMM  = RH * bl / 100;
@@ -897,9 +896,8 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
     const L           = guideLines(as, xh, bl, ds);
     const ghostColor  = hex3(gv('c-gray'));
 
-    const isSingleWordRepeat = active.length === 1;
     let html = '';
-    displaySlots.forEach(({ slot, word }, rowIdx) => {
+    displaySlots.forEach(({ slot, word, blockRow }) => {
       const escaped      = esc(word);
       const wMM          = measureMM(word, fsMM);
       const cellsForWord = Math.max(1, Math.min(NC, Math.floor(pracAvailMM / (wMM + 2))));
@@ -907,11 +905,15 @@ if (!is_dir($imagesDir)) mkdir($imagesDir, 0755, true);
 
       let exContent;
       if (appMode === 'image') {
-        const imgFile = wordImages[slot];
-        exContent = imgFile
-          ? `<img src="images/${esc(imgFile)}" class="ex-img" alt="${escaped}">`
-          : `<div class="ex-placeholder">Välj bild</div>`;
-      } else if (isSingleWordRepeat && rowIdx > 0) {
+        if (blockRow === 0) {
+          const imgFile = wordImages[slot];
+          exContent = imgFile
+            ? `<img src="images/${esc(imgFile)}" class="ex-img" alt="${escaped}">`
+            : `<div class="ex-placeholder">Välj bild</div>`;
+        } else {
+          exContent = '';
+        }
+      } else if (blockRow > 0) {
         exContent = ghostSVG(escaped, bl, fsMM, ghostColor);
       } else {
         exContent = `<div class="ex-word" style="${wordStyle}">${escaped}</div>`;
